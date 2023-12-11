@@ -1,21 +1,9 @@
 // vite-plugin.ts
 import { Plugin } from 'vite';
+import { ValidationOptions } from './enums/ValidationOptions';
 
 type TEnvSchema = Record<string, string>;
 type TEnv = Record<string, any>;
-
-const ValidationOptions = {
-  UNDEFINED: 'undefined',
-  STRING: 'string',
-  NUMBER: 'number',
-  BOOLEAN: 'boolean',
-  NULL: 'null',
-  MAX: 'max',
-  MIN: 'min',
-} as const;
-
-type TValidationOptions =
-  (typeof ValidationOptions)[keyof typeof ValidationOptions];
 
 export const envTypeChecker = (envSchema: TEnvSchema): Plugin => {
   return {
@@ -30,15 +18,28 @@ export const envTypeChecker = (envSchema: TEnvSchema): Plugin => {
 const validateEnvVariables = (env: TEnv, envSchema: TEnvSchema) => {
   const error = {} as Record<string, string>;
 
+  const checkUndefined = (envKey: any, validationVariant: string) => {
+    const envValue = env[envKey];
+
+    const isUndefined = envValue === 'undefined' || envValue === '';
+    const canBeUndefined = validationVariant === ValidationOptions.UNDEFINED;
+
+    if (isUndefined && !canBeUndefined) {
+      error[envKey] = `This environment variable is required`;
+    } else if (isUndefined && canBeUndefined && error[envKey]) {
+      delete error[envKey];
+    }
+
+    return isUndefined && canBeUndefined;
+  };
+
   for (const envKey in envSchema) {
     const validationVariantList = envSchema[envKey].split('|');
-    const envValue = parseValue(env[envKey]);
+    const envValue = env[envKey];
 
     for (const validationVariant of validationVariantList) {
-      if (
-        validationVariant === ValidationOptions.UNDEFINED &&
-        envValue === undefined
-      ) {
+      const isUndefined = checkUndefined(envKey, validationVariant);
+      if (isUndefined) {
         break;
       }
 
@@ -46,16 +47,10 @@ const validateEnvVariables = (env: TEnv, envSchema: TEnvSchema) => {
       for (const validation of validationList) {
         switch (validation) {
           case ValidationOptions.STRING:
-            const isValid = checkIfString(envValue);
-            if (!isValid) {
-              error[envKey] = `value ${envValue} is not a string`;
-            }
             break;
           case ValidationOptions.NUMBER:
             break;
           case ValidationOptions.BOOLEAN:
-            break;
-          case ValidationOptions.NULL:
             break;
           case ValidationOptions.MAX:
             break;
@@ -67,18 +62,6 @@ const validateEnvVariables = (env: TEnv, envSchema: TEnvSchema) => {
 
     return error;
   }
-};
 
-const parseValue = (value: any) => {
-  try {
-    return JSON.parse(value);
-  } catch (e) {
-    return value;
-  }
+  return error;
 };
-
-const checkIfString = (value: any) => {
-  return typeof value === 'string';
-};
-
-const checkIfNumber = (value: any) => {};
